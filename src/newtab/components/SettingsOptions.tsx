@@ -12,10 +12,13 @@ import { loadFaviconUrl } from "../helpers/faviconUtils"
 import { JoinBetaModal } from "./modals/JoinBetaModal"
 import { ShortcutsModal } from "./modals/ShortcutsModal"
 import { OverrideModal } from "./modals/OverrideModal"
+import { CloudLoginModal } from "./modals/CloudLoginModal"
+import { CloudConflictModal } from "./modals/CloudConflictModal"
 import { IFolderItem } from "../helpers/types"
 import { CL } from "../helpers/classNameHelper"
+import { syncManager } from "../helpers/cloudSync"
 
-type OnClickOption = { onClick: (e: any) => void; title: string; text: string; hidden?: boolean; isFile?: boolean, dangerStyle?: boolean }
+type OnClickOption = { onClick: (e: any) => void; title: string; text: string; hidden?: boolean; isFile?: boolean, dangerStyle?: boolean, disabled?: boolean }
 type OnToggleOption = { onToggle: () => void; value: boolean, title: string; text: string; hidden?: boolean }
 export type OptionsConfig = Array<OnClickOption | OnToggleOption | { separator: true }>
 
@@ -34,7 +37,7 @@ export const BetaOptions = (props: {
     trackStat("settingsClicked", { settingName: "sendFeedbackBeta" })
   }
 
-  type OnClickOption = { onClick: (e: any) => void; title: string; text: string; hidden?: boolean; isFile?: boolean }
+  type OnClickOption = { onClick: (e: any) => void; title: string; text: string; hidden?: boolean; isFile?: boolean, disabled?: boolean }
   type OnToggleOption = { onToggle: () => void; value: boolean, title: string; text: string; hidden?: boolean }
   const options: Array<OnClickOption | OnToggleOption | { separator: true }> = [
     {
@@ -190,6 +193,21 @@ export const SettingsOptions = (p: {
   const dispatch = useContext(DispatchContext)
 
   const [isOverrideModalOpen, setOverrideModalOpen] = useState(false)
+  const [isLoginModalOpen, setLoginModalOpen] = useState(false)
+  const [conflictData, setConflictData] = useState<any>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const [isLoggedIn, setIsLoggedIn] = useState(syncManager.isLoggedIn)
+  const [providerName, setProviderName] = useState(syncManager.providerName)
+
+  React.useEffect(() => {
+    const updateState = () => {
+      setIsLoggedIn(syncManager.isLoggedIn)
+      setProviderName(syncManager.providerName)
+    }
+    syncManager.addListener(updateState)
+    return () => syncManager.removeListener(updateState)
+  }, [])
 
   function onToggleNotUsed() {
     if (p.appState.showNotUsed) {
@@ -262,6 +280,53 @@ export const SettingsOptions = (p: {
       text: "Show hidden items",
       hidden: !p.appState.hiddenFeatureIsEnabled
     },
+    { separator: true },
+    // Cloud Sync Section
+    {
+      onClick: () => setLoginModalOpen(true),
+      title: "Sync your bookmarks with GitHub Gist",
+      text: "Login with GitHub",
+      hidden: isLoggedIn
+    },
+
+    {
+      onClick: async () => {
+        if (isSyncing) return;
+        setIsSyncing(true)
+        try {
+          showMessage("Syncing...", dispatch, true)
+          const result = await syncManager.sync(p.appState)
+          
+          if (result && result.status === "conflict") {
+              setConflictData(result)
+              // Don't show success message yet, wait for resolution
+              setIsSyncing(false) // Re-enable button but wait for user
+              return
+          }
+
+          if (result && result.status === "created") {
+             showMessage("Backup created on GitHub!", dispatch)
+          } else {
+             showMessage("Sync completed!", dispatch)
+          }
+        } catch (e: any) {
+          showErrorMessage("Sync failed: " + e.message, dispatch)
+        } finally {
+             setIsSyncing(false)
+        }
+      },
+      title: `Syncing with ${providerName}`,
+      text: isSyncing ? "Syncing..." : "Sync Now",
+      hidden: !isLoggedIn,
+      disabled: isSyncing
+    },
+    {
+      onClick: () => syncManager.logout(),
+      title: "Logout from Cloud Sync",
+      text: `Logout (${providerName})`,
+      hidden: !isLoggedIn,
+      dangerStyle: true
+    },
     {
       separator: true
     },
@@ -273,9 +338,9 @@ export const SettingsOptions = (p: {
     },
     {
       onToggle: onToggleMode,
-      value: p.appState.colorTheme === "dark",
+      value: p.appState.colorTheme === "dark", // Switch visual state might be weird for 3 states, but acceptable for now or change to onClick
       title: "Change your Color Schema",
-      text: "Use Dark Theme"
+      text: `Theme: ${p.appState.colorTheme || "auto"}`
     },
     {
       onToggle: onToggleOpenInTheNewTab,
@@ -338,6 +403,27 @@ export const SettingsOptions = (p: {
     {
       isOverrideModalOpen && <OverrideModal setOpen={setOverrideModalOpen}/>
     }
+    {
+      isLoginModalOpen && <CloudLoginModal onClose={() => setLoginModalOpen(false)}/>
+    }
+    {
+      conflictData && <CloudConflictModal 
+        lastModified={conflictData.lastModified} 
+        onCancel={() => setConflictData(null)}
+        onResolve={async (choice) => {
+            setConflictData(null) // Close modal
+            showMessage("Syncing...", dispatch, true)
+            // Resolve
+            const newState = await syncManager.resolveConflict(conflictData.gistId, p.appState, choice)
+            if (choice === 'download' && newState && newState.spaces) { // Check if newState looks like state
+                 dispatch({ type: Action.InitDashboard, spaces: newState.spaces, saveToLS: true })
+                 showMessage("Downloaded from Cloud!", dispatch)
+            } else {
+                 showMessage("Uploaded to Cloud!", dispatch)
+            }
+        }}
+      />
+    }
   </>
 }
 
@@ -398,6 +484,7 @@ export const Options = (props: { optionsConfig: OptionsConfig | (() => OptionsCo
             })}
             onClick={option.onClick}
             title={option.title}
+            disabled={(option as any).disabled}
           >{option.text}</button>
         }
       }

@@ -48,7 +48,7 @@ export const savingStateKeys = Object.keys(savingStateDefaultValues) as SavingSt
 
 export type ISavingAppState = {
   [key in SavingStateKeys]: IAppState[key]
-} & { hiddenFeatureIsEnabled: boolean, betaMode: boolean; folders: IFolder[], currentWhatsNew:WhatsNew|undefined }
+} & { hiddenFeatureIsEnabled: boolean, betaMode: boolean; folders: IFolder[], currentWhatsNew: WhatsNew | undefined }
 
 export function getStateFromLS(callback: (state: ISavingAppState) => void): void {
   chrome.storage.local.get(savingStateKeys, (res) => {
@@ -81,20 +81,38 @@ darkThemeMq.addEventListener("change", () => {
 })
 
 export function applyTheme(theme: ColorTheme) {
-  canUseSystemTheme = false
-  switch (theme) {
-    case "light":
-      setThemeStyle(false)
-      break
-    case "dark":
-      setThemeStyle(true)
-      break
-    default:
-      setThemeStyle(false)
-      // who need system color?
-      // canUseSystemTheme = true
-      // setThemeStyle(darkThemeMq.matches)
-      break
+  // Remove existing listener if any to avoid duplicates
+  if (darkThemeMq.onchange) darkThemeMq.onchange = null;
+
+  if (theme === "auto" || theme === undefined) {
+    canUseSystemTheme = true
+    setThemeStyle(darkThemeMq.matches)
+
+    // Listen for system changes
+    try {
+      darkThemeMq.addEventListener('change', (e) => {
+        if (canUseSystemTheme) {
+          setThemeStyle(e.matches)
+        }
+      });
+    } catch (e) {
+      // Fallback for older browsers (though Chrome Ext usually supports it)
+      darkThemeMq.onchange = (e) => {
+        if (canUseSystemTheme) {
+          setThemeStyle(e.matches)
+        }
+      }
+    }
+  } else {
+    canUseSystemTheme = false
+    switch (theme) {
+      case "light":
+        setThemeStyle(false)
+        break
+      case "dark":
+        setThemeStyle(true)
+        break
+    }
   }
 }
 
@@ -113,7 +131,7 @@ function setThemeStyle(useDarkMode: boolean) {
 // DEBUG COMMANDS
 ////////////////////////////////////////////////////////
 const cmd: any = {}
-;(window as any).cmd = cmd
+  ; (window as any).cmd = cmd
 
 cmd.clearChromeStorage = () => {
   chrome.storage.local.clear()

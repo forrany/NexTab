@@ -54,5 +54,5 @@ export interface IWidget extends IObject {
 // Data for not yet created FolderItem
 export type IFolderItemToCreate = Pick<IFolderItem, "id" | "favIconUrl" | "url" | "title" | "isSection"> & { position?: string }
 
-// undefined === 'system'
-export type ColorTheme = "light" | "dark" | undefined
+// undefined === 'auto' (legacy) but we use explicit 'auto' now
+export type ColorTheme = "light" | "dark" | "auto"

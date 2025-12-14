@@ -159,6 +159,17 @@ export function Sidebar(p: {
         </button>
       </div>
 
+      <div className="sidebar-search-container" style={{ marginBottom: "12px", opacity: p.appState.sidebarCollapsed && !p.appState.sidebarHovered ? 0 : 1, transition: "opacity 0.2s" }}>
+          <input
+            type="text"
+            className="search sidebar-search"
+            placeholder="Search tabs..."
+            value={p.appState.search}
+            onChange={(e) => dispatch({ type: Action.UpdateSearch, value: e.target.value })}
+            style={{ width: "100%", boxSizing: "border-box" }}
+          />
+      </div>
+
       <SidebarOpenTabs
         tabs={p.appState.tabs}
         spaces={p.appState.spaces}

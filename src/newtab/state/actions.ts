@@ -118,10 +118,10 @@ function stateReducer0(state: IAppState, action: ActionPayload): IAppState {
     }
 
     case Action.ToggleDarkMode: {
-      const curMode = state.colorTheme
-      const options: ColorTheme[] = ["light", "dark"]
+      const curMode = state.colorTheme || "auto"
+      const options: ColorTheme[] = ["light", "dark", "auto"]
       const curModeIndex = options.indexOf(curMode)
-      const nextMode = options[curModeIndex + 1 === 2 ? 0 : curModeIndex + 1]
+      const nextMode = options[(curModeIndex + 1) % options.length]
       applyTheme(nextMode)
       return { ...state, colorTheme: nextMode }
     }
